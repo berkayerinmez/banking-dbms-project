@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: banking_postgres
+    environment:
+      POSTGRES_USER: banking
+      POSTGRES_PASSWORD: banking_pass
+      POSTGRES_DB: bankingdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U banking -d bankingdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: banking_clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: banking_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin_pass_change_me
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - postgres
+      - clickhouse
+    restart: unless-stopped
+
+  generator:
+    build:
+      context: ./generator
+    container_name: banking_generator
+    environment:
+      PG_HOST: postgres
+      PG_DB: bankingdb
+      PG_USER: banking
+      PG_PASS: banking_pass
+      CH_HOST: http://clickhouse:8123
+      CH_DB: banking
+      CH_USER: grafana
+      CH_PASS: GrafanaStrongPass1!
+      MIRROR_TO_CLICKHOUSE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_started
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: banking_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@bankingproject.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_LISTEN_PORT: 80
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  clickhouse_data:
+  grafana_data:
+  pgadmin_data:
