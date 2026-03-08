@@ -1,169 +1,162 @@
-# Banking Database System
+# 🏦 Banking Database Management System
 
-### Term Project – MIS / Database Systems
+### MIS 3301 – Database Management Systems · Term Project
 
-## 1. Project Overview
-This project implements a simplified banking information system that demonstrates proper relational database design, transactional integrity, and analytical reporting.
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
+![ClickHouse](https://img.shields.io/badge/ClickHouse-24.8-FFCC01?logo=clickhouse&logoColor=black)
+![Grafana](https://img.shields.io/badge/Grafana-11.2-F46800?logo=grafana&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-EC2-FF9900?logo=amazonec2&logoColor=white)
 
-The system separates responsibilities between:
-- **PostgreSQL** for transactional (OLTP) operations
-- **ClickHouse** for analytical (OLAP) workloads
-- **Grafana** for visualization and dashboards
+A full-stack banking information system featuring a normalized relational schema, OLTP/OLAP separation, automated transaction generation, and real-time Grafana dashboards — fully containerized with Docker Compose and deployed live on **AWS EC2**.
 
-All components are deployed using Docker Compose on an Amazon EC2 instance.
+---
 
-## 2. System Architecture
-### Components
-- **PostgreSQL**  
-  Primary system of record. Enforces constraints, foreign keys, and triggers. Stores customers, accounts, employees, managers, loans, and transactions.
+## 📐 System Architecture
 
-- **ClickHouse**  
-  Analytical database optimized for time-series aggregation. Receives mirrored transaction data from PostgreSQL. Used for high-volume analytics and dashboards.
-
-- **Grafana**  
-  Visualization layer. Connects to PostgreSQL (entity/state views) and ClickHouse (transaction analytics).
-
-- **Data Generator**  
-  Python service that continuously generates realistic banking transactions, writes to PostgreSQL, and mirrors to ClickHouse.
-
-## 3. Database Design
-### Core Tables
-- branch
-- account_type
-- loan_type
-- card_type
-- customer
-- customer_phone
-- customer_email
-- employee
-- manager
-- account
-- card
-- loan
-- credit_score
-- bank_transaction
-
-### Key Design Decisions
-- Managers are modeled using a separate `manager` table to clearly enforce **exactly one manager per branch**.
-- Employees represent all staff roles.
-- Transactions update account balances using a PostgreSQL trigger.
-- ClickHouse stores only transaction data for analytics.
-
-## 4. Business Rules and Enforcement
-### One Manager per Branch
-- Enforced using a **UNIQUE(branch_id)** constraint in the manager table.
-- Each manager references **one employee** and **one branch**.
-
-### Account Balance Integrity
-- All balance changes occur through `bank_transaction`.
-- A PostgreSQL trigger:
-  - Validates transaction type
-  - Prevents overdrafts
-  - Updates balances atomically
-
-### Referential Integrity
-- Foreign keys enforce valid relationships between:
-  - Customers and accounts
-  - Accounts and transactions
-  - Employees, managers, and branches
-  - Loans and customers/accounts
-
-## 5. Technology Stack
-| Component             | Technology            |
-| --------------------- | --------------------- |
-| Database (OLTP)       | PostgreSQL 16         |
-| Database (OLAP)       | ClickHouse            |
-| Visualization         | Grafana               |
-| Containerization      | Docker & Docker Compose |
-| Hosting               | Amazon EC2            |
-| Language              | Python (data generator) |
-
-## 6. How to Run the Project
-### Prerequisites
-- Docker
-- Docker Compose
-- AWS EC2 (or any Linux server)
-
-### Start All Services
-```sh
-docker compose up -d --build
+```
++------------------------------------------------------+
+|                    Docker Compose                    |
+|                                                      |
+|  +--------------+  writes   +--------------------+   |
+|  |  Generator   | --------> |   PostgreSQL 16    |   |
+|  |  (Python)    |           |      (OLTP)        |<--+-- pgAdmin
+|  |              | --------> |                    |   |
+|  +--------------+  mirrors  +--------------------+   |
+|                      |                               |
+|                      v                               |
+|               +-------------+                        |
+|               |  ClickHouse |                        |
+|               |   (OLAP)    |                        |
+|               +------+------+                        |
+|                      |       +---------------------+ |
+|  PostgreSQL ---------+-----> |  Grafana Dashboards | |
+|                              +---------------------+ |
++------------------------------------------------------+
 ```
 
-### Check Status
-```sh
+| Component | Technology | Role |
+|---|---|---|
+| **PostgreSQL 16** | OLTP Database | System of record — constraints, triggers, FK integrity |
+| **ClickHouse 24.8** | OLAP Database | High-speed analytics on mirrored transaction data |
+| **Grafana 11.2** | Visualization | Dashboards sourced from both PostgreSQL and ClickHouse |
+| **Python Generator** | Data Simulation | Continuously inserts realistic banking transactions |
+| **pgAdmin 4** | DB Admin UI | Web-based PostgreSQL management and query tool |
+
+---
+
+## 🗄️ Database Design
+
+### ER Diagram
+
+<img src="image/01-physical-er-diagram.png" alt="Physical ER Diagram" width="850"/>
+
+### Schema — 14 Tables
+
+| Category | Tables |
+|---|---|
+| **Reference** | `branch`, `account_type`, `loan_type`, `card_type` |
+| **Customer** | `customer`, `customer_phone`, `customer_email`, `credit_score` |
+| **Staff** | `employee`, `manager` |
+| **Banking** | `account`, `card`, `loan`, `bank_transaction` |
+
+### Key Design Decisions
+
+- **One Manager per Branch** — `UNIQUE(branch_id)` on the `manager` table + a partial unique index on `employee WHERE position = 'MANAGER'`
+- **Account Balance Integrity** — A `BEFORE INSERT` trigger on `bank_transaction` validates amounts, prevents overdrafts, and atomically updates balances
+- **Account–Branch Consistency** — Trigger ensures `account.branch_id` always mirrors `customer.branch_id`
+- **Referential Integrity** — Foreign keys across all 14 tables with cascading deletes where appropriate
+
+---
+
+## 📊 Grafana Dashboards
+
+### Analytics Dashboard — powered by ClickHouse
+
+Real-time metrics: transactions per minute, volume by type (Deposit / Withdrawal / Transfer), top accounts, customers per branch, and total balance.
+
+<img src="image/04-grafana-analytics-dashboard.png" alt="Grafana Analytics Dashboard" width="850"/>
+
+### SQL Tables Dashboard — powered by PostgreSQL
+
+All 14 database tables surfaced directly in Grafana for live data inspection.
+
+<img src="image/05-grafana-tables-dashboard.png" alt="Grafana PostgreSQL Tables Dashboard" width="850"/>
+
+---
+
+## ⚡ ClickHouse Analytics
+
+High-performance time-series queries on 260k+ transaction rows executed in ~4ms.
+
+<img src="image/03-clickhouse-query-results.png" alt="ClickHouse Query Results" width="850"/>
+
+---
+
+## 🔧 pgAdmin
+
+<img src="image/02-pgadmin-schema-browser.png" alt="pgAdmin Schema Browser" width="850"/>
+
+---
+
+## 🚀 Getting Started
+
+**Prerequisites:** Docker & Docker Compose
+
+```bash
+git clone https://github.com/berkayerinmez/banking-dbms-project.git
+cd banking-project
+docker compose up -d --build
 docker compose ps
 ```
 
-## 7. Accessing Services
-### Grafana
-- URL: `http://<EC2_PUBLIC_IP>:3000`
-- Username: `admin`
-- Password: `admin_pass_change_me`
+### Service URLs
 
-### pgAdmin (PostgreSQL Web UI)
-- URL: `http://<EC2_PUBLIC_IP>:5050`
-- Email: `admin@bankingproject.com`
-- Password: `admin123`
+| Service | URL | Credentials |
+|---|---|---|
+| Grafana | `http://<EC2_IP>:3000` | `admin` / `admin_pass_change_me` |
+| pgAdmin | `http://<EC2_IP>:5050` | `admin@bankingproject.com` / `admin123` |
+| PostgreSQL | `<EC2_IP>:5432` | db: `bankingdb`, user: `banking` |
+| ClickHouse | `http://<EC2_IP>:8123` | user: `grafana` |
 
-**PostgreSQL connection details inside pgAdmin:**
-- Host: `postgres`
-- Port: `5432`
-- Database: `bankingdb`
-- Username: `banking`
-- Password: `banking_pass`
+---
 
-## 8. Example SQL Queries
-**View a table**
-```sql
-SELECT * FROM public.customer LIMIT 5;
+## 🗂️ Project Structure
+
+```
+banking-project/
+├── docker-compose.yml          # Orchestrates all 5 services
+├── generator/
+│   ├── Dockerfile
+│   └── generate.py             # Faker-based transaction generator
+├── postgres/
+│   └── init/01_schema.sql      # Full schema: tables, triggers, indexes
+├── clickhouse/
+│   └── init/01_init.sql        # MergeTree analytics table
+└── image/                      # Screenshots & ER diagrams
 ```
 
-**View managers**
+---
+
+## 📝 Sample Queries
+
+**Managers by branch**
 ```sql
-SELECT
-  m.manager_id,
-  e.first_name,
-  e.last_name,
-  b.branch_name
-FROM public.manager m
-JOIN public.employee e ON m.employee_id = e.employee_id
-JOIN public.branch b ON m.branch_id = b.branch_id;
+SELECT m.manager_id, e.first_name, e.last_name, b.branch_name
+FROM manager m
+JOIN employee e ON m.employee_id = e.employee_id
+JOIN branch b ON m.branch_id = b.branch_id;
 ```
 
-**View recent transactions**
+**Transactions per minute (ClickHouse)**
 ```sql
-SELECT *
-FROM public.bank_transaction
-ORDER BY transaction_date DESC
-LIMIT 5;
+SELECT toStartOfMinute(transaction_date) AS time, count() AS transactions
+FROM banking.bank_transaction
+GROUP BY time ORDER BY time;
 ```
 
-## 9. Grafana Dashboards
-The project includes dashboards that display:
-- Table data from PostgreSQL (all entities)
-- Transaction activity over time
-- Transaction counts by type
-- Recent transactions
-- Aggregate metrics
-
-Dashboards can be imported using the provided JSON files.
-
-## 10. ER Diagram Explanation
-- Employee represents all staff.
-- Manager is a specialization that references Employee.
-- Each Branch has exactly one Manager.
-- This design simplifies understanding and grading while maintaining normalization.
-
-## 11. Why PostgreSQL + ClickHouse?
-- PostgreSQL ensures ACID compliance and transactional correctness.
-- ClickHouse enables fast analytical queries without impacting OLTP performance.
-- This separation reflects real-world enterprise database architecture.
-
-## 12. Conclusion
-This project demonstrates:
-- Proper relational schema design.
-- Enforcement of business rules at the database level.
-- Clear separation of transactional and analytical workloads.
-- Practical use of modern database and visualization tools.
-
-It is designed to be robust, scalable, and easy to explain in an academic setting.
+**Recent transactions**
+```sql
+SELECT * FROM bank_transaction ORDER BY transaction_date DESC LIMIT 5;
+```
