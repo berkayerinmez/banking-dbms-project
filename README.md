@@ -106,7 +106,7 @@ High-performance time-series queries on 260k+ transaction rows executed in ~4ms.
 
 ```bash
 git clone https://github.com/berkayerinmez/banking-dbms-project.git
-cd banking-project
+cd banking-dbms-project
 docker compose up -d --build
 docker compose ps
 ```
@@ -125,7 +125,7 @@ docker compose ps
 ## 🗂️ Project Structure
 
 ```
-banking-project/
+banking-dbms-project/
 ├── docker-compose.yml          # Orchestrates all 5 services
 ├── generator/
 │   ├── Dockerfile
